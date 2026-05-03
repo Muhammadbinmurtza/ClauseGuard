@@ -1,0 +1,17 @@
+FREELANCE SERVICES AGREEMENT
+
+1. SERVICES. Freelancer agrees to provide web development services to Client as described in the attached Statement of Work. Freelancer shall perform the services in a professional and workmanlike manner in accordance with industry standards.
+
+2. PAYMENT TERMS. Client shall pay Freelancer at the rate of $100 per hour. Invoices shall be submitted monthly, and Client shall pay all undisputed invoices within sixty (60) calendar days of receipt. Late payments shall accrue interest at the rate of 1% per month.
+
+3. OWNERSHIP OF WORK PRODUCT. All work product, deliverables, designs, code, documentation, and other materials created by Freelancer in connection with this Agreement (collectively, the "Work Product") shall be the sole and exclusive property of Client. Freelancer hereby assigns to Client all right, title, and interest in and to the Work Product, including all intellectual property rights. For the avoidance of doubt, Client shall also own any pre-existing tools, libraries, frameworks, code snippets, templates, or other materials that Freelancer incorporates into the Work Product, even if such materials were created by Freelancer prior to this Agreement.
+
+4. REVISIONS AND MODIFICATIONS. Client shall be entitled to request unlimited revisions to the Work Product at any time. Freelancer shall complete all requested revisions at no additional charge and within the timeframe reasonably specified by Client. Freelancer may not deny any revision request.
+
+5. NON-COMPETITION. During the term of this Agreement and for a period of one (1) year after its termination, Freelancer shall not provide web development or any related services to any business that offers products or services similar to Client's business, as determined by Client in its sole discretion.
+
+6. TERMINATION. Client may terminate this Agreement at any time for any reason or for no reason by providing written notice to Freelancer. Upon termination for convenience, Freelancer shall not be entitled to any kill fee, termination fee, or compensation beyond payment for hours actually worked through the date of termination. Freelancer may only terminate this Agreement for material breach by Client that remains uncured for thirty (30) days.
+
+7. GOVERNING LAW. This Agreement shall be governed by the laws of the State of California. Any legal action arising from this Agreement shall be brought exclusively in the courts located in Los Angeles County, California.
+
+8. INDEMNIFICATION. Freelancer agrees to indemnify, defend, and hold harmless Client from and against any and all claims, damages, losses, and expenses arising out of or related to Freelancer's performance of the services, including any claims that the Work Product infringes third-party intellectual property rights.

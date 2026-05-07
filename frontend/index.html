@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ClauseGuard — AI Contract Risk Analyzer</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-logo">🛡️</span>
+      <span class="sidebar-name">Clause<span class="accent">Guard</span></span>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="sidebar-label">Upload Contract</div>
+      <label class="upload-zone" id="uploadZone">
+        <input type="file" id="fileInput" accept=".pdf,.txt,.docx" hidden>
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">Drop file or click to browse</div>
+        <div class="upload-hint">PDF, TXT, DOCX · Max 10 MB</div>
+      </label>
+      <div class="file-info" id="fileInfo" style="display:none">
+        <span class="file-icon">📄</span>
+        <span class="file-name" id="fileName"></span>
+        <span class="file-size" id="fileSize"></span>
+      </div>
+    </div>
+
+    <div class="sidebar-actions">
+      <button class="btn btn-primary btn-full" id="btnDemo">
+        <span class="btn-icon">⚡</span> Instant Demo
+      </button>
+      <button class="btn btn-secondary btn-full" id="btnAnalyze" disabled>
+        <span class="btn-icon">🔍</span> Analyze Contract
+      </button>
+    </div>
+
+    <div class="sidebar-section" id="agentPanel" style="display:none">
+      <div class="sidebar-label">Agent Pipeline</div>
+      <div class="agent-list" id="agentList">
+        <div class="agent-row" data-agent="Extractor">
+          <span class="agent-step">①</span>
+          <span class="agent-name">Extractor</span>
+          <span class="agent-status pending">⏳</span>
+          <span class="agent-msg">Pending</span>
+        </div>
+        <div class="agent-row" data-agent="Classifier">
+          <span class="agent-step">②</span>
+          <span class="agent-name">Classifier</span>
+          <span class="agent-status pending">⏳</span>
+          <span class="agent-msg">Pending</span>
+        </div>
+        <div class="agent-row" data-agent="Risk Scorer">
+          <span class="agent-step">③</span>
+          <span class="agent-name">Risk Scorer</span>
+          <span class="agent-status pending">⏳</span>
+          <span class="agent-msg">Pending</span>
+        </div>
+        <div class="agent-row" data-agent="Translator">
+          <span class="agent-step">④</span>
+          <span class="agent-name">Translator</span>
+          <span class="agent-status pending">⏳</span>
+          <span class="agent-msg">Pending</span>
+        </div>
+        <div class="agent-row" data-agent="Reporter">
+          <span class="agent-step">⑤</span>
+          <span class="agent-name">Reporter</span>
+          <span class="agent-status pending">⏳</span>
+          <span class="agent-msg">Pending</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="sidebarStats" style="display:none">
+      <div class="sidebar-label">Contract Stats</div>
+      <div class="stat-grid" id="statGrid">
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-label">Powered by</div>
+      <div class="powered-by">DeepSeek-V3 · AMD MI300X<br>OpenAI Agents SDK</div>
+      <div class="hackathon-badge">AMD Developer Hackathon 2025</div>
+    </div>
+
+    <button class="sidebar-toggle" id="sidebarToggle" title="Toggle sidebar">☰</button>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <main class="main" id="main">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-glow"></div>
+      <h1 class="header-title">🛡️ Clause<span class="accent">Guard</span></h1>
+      <p class="header-tagline">Understand, Fix, and Negotiate Any Contract in Seconds</p>
+      <p class="header-subtitle">Upload a contract and let AI-powered agents analyze every clause for risks, suggest fixes, and help you negotiate — all in plain English.</p>
+    </header>
+
+    <!-- Results Area (hidden until analyzed) -->
+    <div class="results" id="results" style="display:none">
+
+      <!-- Risk Banner -->
+      <div class="risk-banner" id="riskBanner" style="display:none"></div>
+
+      <!-- Tab Navigation -->
+      <nav class="tab-nav" id="tabNav">
+        <button class="tab-btn active" data-tab="overview">
+          <span class="tab-icon">📊</span> Overview
+        </button>
+        <button class="tab-btn" data-tab="clauses">
+          <span class="tab-icon">📋</span> Clauses
+        </button>
+        <button class="tab-btn" data-tab="negotiation">
+          <span class="tab-icon">💬</span> Negotiation
+        </button>
+        <button class="tab-btn" data-tab="chat">
+          <span class="tab-icon">🤖</span> Chat Assistant
+        </button>
+      </nav>
+
+      <!-- ───── TAB: Overview ───── -->
+      <section class="tab-content active" id="tab-overview">
+        <div class="overview-top">
+          <div class="metric-card" id="metricScore">
+            <div class="metric-label">Overall Risk</div>
+            <div class="metric-value" id="scoreValue">—</div>
+            <div class="metric-badge" id="scoreBadge"></div>
+          </div>
+          <div class="metric-card chart-card">
+            <div class="metric-label">Severity Distribution</div>
+            <canvas id="severityChart" width="300" height="160"></canvas>
+          </div>
+          <div class="metric-card" id="metricAttention">
+            <div class="metric-label">Needs Attention</div>
+            <div class="metric-value" id="attentionValue">—</div>
+            <div class="metric-badge" id="attentionBadge"></div>
+          </div>
+        </div>
+
+        <div class="severity-pills" id="severityPills"></div>
+
+        <div class="section-header">⚡ Top 3 Actions Before Signing</div>
+        <div class="action-list" id="actionList"></div>
+
+        <div class="section-header" id="impactHeader" style="display:none">⚠️ What Could Happen If You Sign This?</div>
+        <div class="impact-list" id="impactList"></div>
+      </section>
+
+      <!-- ───── TAB: Clauses ───── -->
+      <section class="tab-content" id="tab-clauses">
+        <div class="filter-bar">
+          <span class="filter-label">Filter by severity:</span>
+          <label class="filter-chip" data-sev="CRITICAL"><input type="checkbox" checked><span class="chip-dot" style="background:#ff4444"></span>Critical</label>
+          <label class="filter-chip" data-sev="HIGH"><input type="checkbox" checked><span class="chip-dot" style="background:#ff8c00"></span>High</label>
+          <label class="filter-chip" data-sev="MEDIUM"><input type="checkbox" checked><span class="chip-dot" style="background:#ffd700"></span>Medium</label>
+          <label class="filter-chip" data-sev="LOW"><input type="checkbox"><span class="chip-dot" style="background:#32cd32"></span>Low</label>
+          <label class="filter-chip" data-sev="INFO"><input type="checkbox"><span class="chip-dot" style="background:#1e90ff"></span>Info</label>
+        </div>
+        <div class="clause-list" id="clauseList"></div>
+        <div class="empty-state" id="clauseEmpty" style="display:none">No clauses match the selected filters.</div>
+      </section>
+
+      <!-- ───── TAB: Negotiation ───── -->
+      <section class="tab-content" id="tab-negotiation">
+        <div class="section-header">💬 Negotiation Copilot</div>
+        <p class="section-caption">Critical and High-risk clauses shown side-by-side with safer alternatives.</p>
+        <div class="negotiation-list" id="negotiationList"></div>
+        <div class="empty-state" id="negoEmpty" style="display:none">✨ No Critical or High-risk clauses found — this contract looks reasonable!</div>
+        <div class="download-section" id="negoDownload" style="display:none">
+          <div class="section-header">📝 Your Safer Contract</div>
+          <p class="section-caption">All Critical and High-risk clauses replaced with negotiated safer versions.</p>
+          <button class="btn btn-primary" id="btnDownloadSafer">
+            📥 Download Safer Contract (.txt)
+          </button>
+        </div>
+      </section>
+
+      <!-- ───── TAB: Chat ───── -->
+      <section class="tab-content" id="tab-chat">
+        <div class="chat-header-banner">
+          <span class="chat-banner-icon">💡</span>
+          <span class="chat-banner-text">I've already analyzed your contract. Ask me anything.</span>
+          <span class="chat-banner-sub">— I have full context of every clause and its analysis.</span>
+        </div>
+        <div class="quick-actions" id="quickActions">
+          <button class="chip-btn" data-prompt="What are the most important changes I should request before signing this contract? Be specific.">🔍 How do I fix this?</button>
+          <button class="chip-btn" data-prompt="Looking at my contract overall, how safe is it to sign as-is? What's the worst that could happen?">🛡️ Is this safe?</button>
+          <button class="chip-btn" data-prompt="Give me a quick summary of the 3 biggest risks in this contract and what each one means for me.">📋 Summarize risks</button>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="chat-input-row">
+          <input type="text" class="chat-input" id="chatInput" placeholder="Ask about this contract...">
+          <button class="btn btn-primary chat-send" id="chatSend">Send</button>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btnClearChat" style="display:none">🗑️ Clear Chat</button>
+      </section>
+
+      <!-- Footer -->
+      <div class="results-footer">
+        <button class="btn btn-secondary" id="btnDownloadReport">📥 Download Report (.md)</button>
+        <span class="footer-meta" id="footerMeta"></span>
+      </div>
+    </div>
+
+    <!-- Welcome state (shown before analysis) -->
+    <div class="welcome" id="welcome">
+      <div class="welcome-card">
+        <div class="welcome-steps">
+          <div class="welcome-step">
+            <span class="step-number">1</span>
+            <span class="step-text">Upload any contract file</span>
+          </div>
+          <div class="welcome-step">
+            <span class="step-number">2</span>
+            <span class="step-text">5 AI agents analyze every clause</span>
+          </div>
+          <div class="welcome-step">
+            <span class="step-number">3</span>
+            <span class="step-text">Get a risk report in plain English</span>
+          </div>
+          <div class="welcome-step">
+            <span class="step-number">4</span>
+            <span class="step-text">Use Negotiation Copilot to fix issues</span>
+          </div>
+          <div class="welcome-step">
+            <span class="step-number">5</span>
+            <span class="step-text">Chat with AI Copilot for answers</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>

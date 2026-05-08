@@ -251,131 +251,256 @@ CUSTOM_CSS = """
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _build_demo_report() -> FinalReport:
-    """Build a pre-cached demo report with negotiation copilot content."""
+    """Build a pre-cached demo report showcasing all features with realistic contract data."""
     from clauseguard.models.clause import Clause, ClauseType
 
-    demo_with_copilot: list[dict] = [
+    demo_clauses: list[dict] = [
         {
-            "text": "Recipient hereby irrevocably assigns to Company all inventions, discoveries, and intellectual property created during this Agreement and for 1 year after, regardless of whether created on Recipient's own time or equipment.",
+            "text": "Employee hereby irrevocably assigns to Company all inventions, discoveries, works of authorship, and intellectual property created or conceived by Employee, whether during working hours or on Employee's own time, using Company equipment or Employee's personal equipment, and whether or not related to Company's business. This obligation survives termination of employment for a period of two (2) years.",
             "ctype": "IP_ASSIGNMENT", "sev": "CRITICAL",
-            "title": "IP Assignment of Personal Work",
-            "reason": "Claims ownership of ALL creations including personal projects on personal time and equipment, extending 1 year after termination.",
-            "plain": "You give the company ownership of everything you create — including personal side projects on your own time and equipment — for up to a year after you leave.",
-            "action": "Demand a carve-out for inventions created on your own time using your own equipment.",
-            "safer": "Employee assigns to Company all inventions directly related to Company's business and created during working hours using Company resources. Inventions created on Employee's own time using personal equipment, and unrelated to Company's business, remain the sole property of Employee.",
-            "negotiation": "Hi, I've reviewed the IP clause and would like to request an adjustment to ensure personal projects created outside work hours remain mine. I've suggested alternative wording below. Would you be open to this change? Thanks!",
-            "impacts": ["You may lose ownership of any side projects or startups you work on during employment", "The company could claim your open-source contributions made on weekends"],
+            "title": "Overbroad IP Assignment Covering Personal Work",
+            "reason": "This clause claims ownership of ALL employee creations made at any time on any equipment, including unrelated personal side projects, and extends the obligation for 2 years after leaving the company — well beyond industry standard.",
+            "plain": "You give the company full ownership of everything you ever create — including personal hobbies, side projects, and weekend work done on your own computer — even for two years after you quit or are fired.",
+            "action": "Negotiate a strict carve-out limiting IP assignment to work directly related to company business, created during work hours using company resources only.",
+            "safer": "Employee assigns to Company all inventions that (a) relate directly to Company's current or planned business, (b) are created during working hours, and (c) use Company resources. Inventions created on Employee's own time using personal equipment and unrelated to Company's business remain Employee's sole property. This obligation ends upon termination of employment.",
+            "negotiation": "Hi [Name],\n\nI've reviewed the intellectual property clause and have a concern about its extremely broad scope. As written, it covers personal side projects, hobbies, and work done on my own time with my own equipment — even extending 2 years after I leave. That's well beyond what's standard.\n\nI've drafted an alternative below that protects the company's legitimate interests while respecting my personal creative freedom. The key change: it limits the scope to work actually related to the company's business, done during working hours, using company resources.\n\nWould you be open to this revision?\n\nThanks,\n[Your Name]",
+            "impacts": ["You could lose ownership of a personal startup, app, or creative project you build on weekends", "The company could claim royalties or ownership of open-source contributions you make", "Even after quitting, anything you invent for 2 years could be claimed by your former employer"],
         },
         {
-            "text": "All disputes shall be resolved exclusively through binding arbitration. The parties waive any right to a trial by jury and waive the right to participate in any class action.",
+            "text": "Any and all disputes, claims, or controversies arising out of or relating to this Agreement shall be resolved exclusively through final and binding arbitration administered by the American Arbitration Association. The Parties hereby expressly waive any right to a trial by jury and waive any right to participate in or bring a class, collective, or representative action. The arbitrator shall have no authority to consolidate claims or conduct class-wide proceedings.",
             "ctype": "ARBITRATION", "sev": "CRITICAL",
-            "title": "Mandatory Arbitration with Jury + Class Action Waiver",
-            "reason": "Forces disputes into private arbitration, waives your constitutional right to a jury trial, and blocks class actions — all with no opt-out.",
-            "plain": "You give up your right to sue in court or join a class-action lawsuit. All disputes go through private arbitration instead.",
-            "action": "Add an opt-out clause for arbitration — preserve your right to go to court.",
-            "safer": "Either party may opt out of binding arbitration by providing written notice within 30 days of signing. Nothing in this section prevents participation in class actions where permitted by law.",
-            "negotiation": "Hi, I've reviewed the dispute resolution clause. I'd like to add an opt-out option for arbitration so both parties retain the right to choose their preferred forum. I've suggested language below. Does this work for you?",
-            "impacts": ["If the company violates your rights, you cannot sue them in a public court", "You cannot join with other affected parties in a class action — you must fight alone"],
+            "title": "Mandatory Arbitration Forcing Waiver of All Court Rights",
+            "reason": "This clause strips away your right to sue in court, forces mandatory private arbitration, waives your constitutional right to a jury trial, and blocks you from joining any class action — with zero opt-out provision.",
+            "plain": "You cannot ever take the company to court. Any dispute — no matter how serious — goes through private arbitration that the company pays for and controls. You also give up your right to join a class-action lawsuit with others who may have been wronged the same way.",
+            "action": "Demand an opt-out provision allowing either party to choose court over arbitration. Alternatively, remove the class action waiver entirely.",
+            "safer": "Either party may elect to opt out of binding arbitration by providing written notice within thirty (30) days of signing this Agreement. Nothing in this section shall prevent any party from participating in a class, collective, or representative action where permitted by applicable law. Both parties retain the right to seek injunctive or equitable relief in a court of competent jurisdiction.",
+            "negotiation": "Hi [Name],\n\nI've reviewed the dispute resolution section and have significant concerns about the mandatory arbitration clause. It completely removes my ability to go to court — even for serious disputes — and blocks class actions entirely.\n\nI'm not opposed to arbitration as an option, but forcing it as the ONLY option with no way out is too one-sided. I've drafted a revised version that adds a 30-day opt-out window (so both parties can choose) and preserves the right to join class actions where the law allows.\n\nThis creates a fair balance. Would you be open to this?\n\nBest,\n[Your Name]",
+            "impacts": ["If the company steals your work or fails to pay you, you cannot sue in a public court — you must go through a private arbitrator they help select", "You face the company alone — you cannot pool resources with other employees who were treated the same way", "Arbitration decisions are nearly impossible to appeal, giving you no safety net if the arbitrator makes a mistake"],
         },
         {
-            "text": "For 18 months following termination, Recipient shall not engage in any business competitive with Company, anywhere in the world.",
+            "text": "Employee expressly agrees that during the term of employment and for a period of eighteen (18) months following the termination of employment for any reason, Employee shall not, directly or indirectly, own, manage, operate, control, be employed by, consult for, or render services to any business that is competitive with Company, as determined by Company in its sole discretion, anywhere in the world.",
             "ctype": "NON_COMPETE", "sev": "HIGH",
-            "title": "Worldwide Non-Compete — 18 Months",
-            "reason": "18-month ban on working for ANY competitor worldwide with no geographic limitation tied to Company's actual operations.",
-            "plain": "You cannot work for any competitor anywhere in the world for 18 months after this agreement ends — even if the company doesn't operate in that region.",
-            "action": "Reduce duration to 12 months and limit scope to regions where Company actually does business.",
-            "safer": "For 12 months following termination, Recipient shall not provide services to direct competitors of Company within the specific metro areas where Company has active business operations.",
-            "negotiation": "Hi, the non-compete clause is quite broad — it covers the entire world for 18 months. I'd suggest narrowing the scope to 12 months within regions where the company actually operates. I've drafted alternative language below.",
-            "impacts": ["You may be unable to work in your industry anywhere in the world for 18 months after leaving", "Relocating to a new city won't help — the restriction is global"],
+            "title": "Worldwide Non-Compete with Unlimited Company Discretion",
+            "reason": "This 18-month non-compete bans you from working for ANY business the company unilaterally deems 'competitive' — worldwide, with no geographic limit, and the company alone decides who counts as a competitor.",
+            "plain": "You cannot work for any company anywhere in the world for 18 months after leaving — and your employer alone gets to decide which companies count as 'competitors.' Even a completely unrelated job could be blocked if the company says so.",
+            "action": "Reduce duration to 12 months maximum, limit geographic scope to regions where the company actually operates, and define competitors objectively (not at the company's sole discretion).",
+            "safer": "For a period of twelve (12) months following termination, Employee shall not provide services to entities that are direct competitors of Company, limited to the specific metropolitan areas and regions where Company has active and material business operations, and limited to services substantially similar to those Employee performed for Company.",
+            "negotiation": "Hi [Name],\n\nThe non-compete clause is exceptionally broad — 18 months, worldwide, covering any business the company chooses to label as a competitor. This would make it nearly impossible for me to find work in my field after leaving.\n\nI've proposed a revised version that's far more reasonable: 12 months, limited to direct competitors (objectively defined), and restricted to regions where the company actually operates. This still protects your legitimate business interests without unfairly restricting my career.\n\nWould this work for you?\n\nThanks,\n[Your Name]",
+            "impacts": ["You may be unable to work in your entire industry for a year and a half after leaving — regardless of where you live", "A company in a different country doing vaguely related work could trigger the restriction", "The 'sole discretion' language means the company can retroactively decide you violated it"],
         },
         {
-            "text": "This Agreement shall automatically renew for successive 1-year terms unless either party provides written notice at least 90 days prior.",
+            "text": "Company shall have no liability to Employee for any indirect, incidental, special, consequential, or punitive damages arising out of this Agreement, regardless of the theory of liability, even if Company has been advised of the possibility of such damages. In no event shall Company's total aggregate liability exceed the lesser of (a) $1,000 or (b) one month of Employee's base salary.",
+            "ctype": "LIABILITY_CAP", "sev": "HIGH",
+            "title": "Extremely Low Liability Cap with Unlimited Damage Waiver",
+            "reason": "The company caps its liability at just $1,000 or one month's salary (whichever is lower) and completely waives all indirect, consequential, and punitive damages — even if they knowingly caused harm.",
+            "plain": "No matter what the company does to you — even if they intentionally harm you — the most you can ever recover is $1,000 or one month's pay. You cannot claim any additional damages for lost opportunities, emotional distress, or other consequences.",
+            "action": "Negotiate liability cap to at least 12 months' salary or the full value of the contract. Remove the blanket waiver of consequential damages for cases of willful misconduct.",
+            "safer": "Company's total aggregate liability under this Agreement shall not exceed the greater of (a) twelve (12) months of Employee's base salary or (b) $50,000. This limitation shall not apply to damages arising from Company's willful misconduct, gross negligence, fraud, or violation of applicable law.",
+            "negotiation": "Hi [Name],\n\nThe liability cap at $1,000 or one month's salary is extremely low — it basically means the company faces no meaningful consequences even for serious violations of the agreement. I'd like to propose a more balanced cap at 12 months' salary or $50,000, with an exception for willful misconduct and fraud.\n\nThis is standard for contracts like this and ensures both parties have real skin in the game. Let me know your thoughts.\n\nBest,\n[Your Name]",
+            "impacts": ["If the company breaches the contract and costs you your career, the most you get is $1,000", "You cannot recover for lost job opportunities, relocation costs, or emotional distress caused by the company's actions"],
+        },
+        {
+            "text": "Company may terminate this Agreement and Employee's engagement at any time, with or without cause, upon providing one (1) day written notice. Upon termination, Employee shall receive no severance, continuation of benefits, or compensation of any kind other than base salary earned through the date of termination.",
+            "ctype": "TERMINATION", "sev": "HIGH",
+            "title": "No-Notice At-Will Termination with Zero Severance",
+            "reason": "The company can fire you with just 1 day notice for any reason — or no reason at all — and you walk away with absolutely nothing: no severance, no benefits continuation, no compensation of any kind.",
+            "plain": "The company can fire you tomorrow with one day's notice and pay you nothing beyond what you already earned. No severance, no health insurance continuation, no transition support — you're on your own immediately.",
+            "action": "Negotiate a minimum 30-day notice period (or pay in lieu) and at least 2-4 weeks of severance, especially for termination without cause.",
+            "safer": "Either party may terminate this Agreement upon thirty (30) days written notice. In the event of termination by Company without cause, Employee shall receive severance equal to four (4) weeks of base salary and continuation of health benefits for thirty (30) days. Termination with cause requires written documentation of the specific cause.",
+            "negotiation": "Hi [Name],\n\nI noticed the termination clause allows the company to end the relationship with essentially zero notice and provides no severance or benefits continuation whatsoever. This creates significant financial risk for me.\n\nI'd suggest a more balanced approach: 30 days' notice on both sides, plus a modest severance of 4 weeks' salary if terminated without cause. This is standard practice and ensures stability for both parties.\n\nWould you be open to discussing this?\n\nThanks,\n[Your Name]",
+            "impacts": ["You could lose your job with no warning and no financial cushion whatsoever", "You immediately lose health insurance with no COBRA or continuation option provided", "The company can fire you for an arbitrary reason with no documentation required"],
+        },
+        {
+            "text": "This Agreement shall automatically renew for successive one-year terms unless either party provides written notice of non-renewal at least ninety (90) days prior to the end of the then-current term.",
             "ctype": "AUTO_RENEWAL", "sev": "MEDIUM",
-            "title": "Auto-Renewal with 90-Day Notice",
-            "reason": "Auto-renews annually. 90-day notice period is longer than standard and easy to miss.",
-            "plain": "This agreement renews automatically every year. You must give 90 days written notice to cancel — miss the deadline and you're locked in.",
-            "action": "Reduce notice period to 30 days or request automatic email reminders.",
+            "title": "Auto-Renewal with Long 90-Day Notice Window",
+            "reason": "Contract auto-renews annually and requires 90-day notice to cancel — much longer than the standard 30-day notice. Easy to miss the window.",
+            "plain": "This agreement renews automatically every year. You must give 90 days' written notice (3 months!) to cancel — miss that window and you're locked in for another full year.",
+            "action": "Reduce notice period to 30 days and request automatic email reminders 45 days before each renewal.",
             "safer": "", "negotiation": "", "impacts": [],
         },
         {
-            "text": "Recipient agrees to hold all Confidential Information in strict confidence.",
-            "ctype": "NDA", "sev": "LOW",
-            "title": "Standard Confidentiality Obligation",
-            "reason": "Standard NDA language requiring reasonable care — no unusual provisions.",
-            "plain": "You must keep the company's confidential information secret and only use it as authorized.",
-            "action": "No action needed — standard boilerplate.",
+            "text": "The Recipient shall not disclose any Confidential Information to any third party without prior written consent of the Disclosing Party. 'Confidential Information' means all information disclosed by the Disclosing Party, whether oral, written, or in any other form, regardless of whether it is marked 'confidential.' The obligation of confidentiality shall survive termination of this Agreement indefinitely.",
+            "ctype": "NDA", "sev": "MEDIUM",
+            "title": "Overly Broad and Perpetual Confidentiality Obligation",
+            "reason": "Defines confidential information to include ALL information shared — even oral conversations and unmarked documents — and the obligation lasts forever with no expiration.",
+            "plain": "Anything the company tells you — even casual conversations or unmarked documents — counts as confidential, and you must keep it secret forever. There's no time limit and no exception for information that becomes public.",
+            "action": "Request that only written information marked 'confidential' be covered, and add a reasonable time limit (e.g., 3-5 years) or a public-domain exception.",
             "safer": "", "negotiation": "", "impacts": [],
         },
         {
-            "text": "This Agreement shall be governed by the laws of the State of New York.",
+            "text": "Employee agrees to indemnify, defend, and hold harmless Company and its officers, directors, employees, and agents from and against any and all claims, damages, losses, liabilities, costs, and expenses (including reasonable attorneys' fees) arising out of or related to Employee's performance under this Agreement, regardless of whether Company was negligent or at fault.",
+            "ctype": "INDEMNIFICATION", "sev": "HIGH",
+            "title": "One-Sided Indemnification Covering Company's Own Negligence",
+            "reason": "You must pay for ALL legal costs and damages — even those caused by the company's own negligence — with no reciprocal obligation from the company. This exposes you to unlimited financial liability.",
+            "plain": "If the company does something negligent and gets sued, you have to pay all their legal bills and any damages they owe — even though it was their fault. Meanwhile, the company has no obligation to cover you for anything.",
+            "action": "Make indemnification mutual (both parties cover each other) and exclude claims arising from the other party's own negligence or misconduct.",
+            "safer": "Each party shall indemnify and hold harmless the other party from claims arising from the indemnifying party's own negligence or willful misconduct. Neither party shall be required to indemnify the other for claims arising from the other party's own fault. This obligation is mutual and reciprocal.",
+            "negotiation": "Hi [Name],\n\nThe indemnification clause is entirely one-sided — I'm responsible for covering the company's legal costs even when the company is at fault, but the company covers nothing for me. This creates potentially unlimited financial exposure.\n\nI've proposed a mutual version where each party covers claims arising from their own actions, not the other's. This is standard and fair. Can we discuss?\n\nThanks,\n[Your Name]",
+            "impacts": ["You could be forced to pay hundreds of thousands in legal fees for a lawsuit caused by the company's own negligence", "Your personal assets (savings, home) could be at risk with no cap on liability"],
+        },
+        {
+            "text": "The Recipient shall not collect, store, process, or transmit any personal data of third parties without obtaining prior express written consent and implementing reasonable security measures. Any data shared with third-party service providers must be governed by a written data processing agreement.",
+            "ctype": "DATA_SHARING", "sev": "LOW",
+            "title": "Standard Data Protection Clause",
+            "reason": "Standard data protection language requiring consent and security measures before handling personal data — no unusual or risky provisions.",
+            "plain": "You must get written permission and use proper security before handling anyone's personal data. This is standard practice and protects everyone involved.",
+            "action": "No action needed — this is standard and reasonable.",
+            "safer": "", "negotiation": "", "impacts": [],
+        },
+        {
+            "text": "Invoices shall be submitted monthly and payment shall be made within sixty (60) days of receipt of a properly submitted invoice. Late payments shall accrue interest at a rate of 1.5% per month.",
+            "ctype": "PAYMENT", "sev": "MEDIUM",
+            "title": "Net-60 Payment Terms with High Late Interest",
+            "reason": "Net-60 payment terms (2 months to get paid) are significantly longer than standard Net-30, and the 1.5% monthly late fee compounds to over 19% annually.",
+            "plain": "You submit invoices monthly but the company has 60 days (2 months) to pay you. If they're late, they add 1.5% monthly interest — which sounds good but means you wait a long time for your money.",
+            "action": "Negotiate Net-30 payment terms and reduce late interest to a standard rate (e.g., 8-10% annually).",
+            "safer": "", "negotiation": "", "impacts": [],
+        },
+        {
+            "text": "This Agreement shall be governed by and construed in accordance with the laws of the State of New York, without regard to its conflict of laws principles. Any legal action shall be brought exclusively in the state or federal courts located in New York County, New York.",
             "ctype": "GOVERNING_LAW", "sev": "LOW",
-            "title": "Standard Governing Law",
-            "reason": "Standard choice-of-law clause selecting New York — common in contracts.",
-            "plain": "This agreement is governed by New York law, and disputes must be handled in New York courts.",
-            "action": "No action needed unless you are far from New York.",
+            "title": "Standard New York Governing Law and Venue",
+            "reason": "Standard choice-of-law and venue clause selecting New York, a common jurisdiction for commercial contracts.",
+            "plain": "This agreement is governed by New York law, and any court cases must be handled in New York courts — standard practice for many U.S. contracts.",
+            "action": "No action needed unless you're located far from New York and would prefer a more convenient venue.",
             "safer": "", "negotiation": "", "impacts": [],
         },
         {
-            "text": "This Agreement constitutes the entire agreement between the parties.",
+            "text": "If any provision of this Agreement is found to be invalid or unenforceable, the remaining provisions shall continue in full force and effect. This Agreement constitutes the entire agreement between the parties and supersedes all prior agreements, whether written or oral. No modification shall be effective unless in writing and signed by both parties.",
             "ctype": "OTHER", "sev": "INFO",
-            "title": "Standard Entire Agreement Clause",
-            "reason": "Standard integration clause confirming this is the complete agreement.",
-            "plain": "This document is the complete and final agreement between you and the company.",
-            "action": "No action needed — standard boilerplate.",
+            "title": "Standard Severability and Entire Agreement",
+            "reason": "Standard boilerplate provisions covering severability (invalid parts don't void the whole agreement), entire agreement (this document is the complete deal), and written modification requirement.",
+            "plain": "Standard legal wrap-up: if one part of this contract is found invalid, the rest still stands. This document is the complete agreement, and any changes must be in writing and signed.",
+            "action": "No action needed — these are standard boilerplate provisions found in virtually every contract.",
             "safer": "", "negotiation": "", "impacts": [],
         },
     ]
 
     scored = []
-    for i, d in enumerate(demo_with_copilot, 1):
-        clause = Clause(id=i, raw_text=d["text"], plain_english=d["plain"],
-                        clause_type=ClauseType(d["ctype"]),
-                        section_heading=d["ctype"].replace("_", " "), position=i, confidence_score=0.95)
-        finding = RiskFinding(clause_id=i, severity=Severity(d["sev"]), risk_title=d["title"],
-                              risk_reason=d["reason"], recommended_action=d["action"],
-                              safer_clause_version=d["safer"], negotiation_message=d["negotiation"],
-                              impact_scenarios=d["impacts"])
+    for i, d in enumerate(demo_clauses, 1):
+        clause = Clause(
+            id=i,
+            raw_text=d["text"],
+            plain_english=d["plain"],
+            clause_type=ClauseType(d["ctype"]),
+            section_heading=d["ctype"].replace("_", " "),
+            position=i,
+            confidence_score=0.95,
+        )
+        finding = RiskFinding(
+            clause_id=i,
+            severity=Severity(d["sev"]),
+            risk_title=d["title"],
+            risk_reason=d["reason"],
+            recommended_action=d["action"],
+            safer_clause_version=d["safer"],
+            negotiation_message=d["negotiation"],
+            impact_scenarios=d["impacts"],
+        )
         scored.append(ScoredClause(clause=clause, finding=finding))
 
     crit = sum(1 for s in scored if s.finding.severity == Severity.CRITICAL)
     high = sum(1 for s in scored if s.finding.severity == Severity.HIGH)
     med = sum(1 for s in scored if s.finding.severity == Severity.MEDIUM)
     low = sum(1 for s in scored if s.finding.severity == Severity.LOW)
-    raw = (crit * 10 + high * 7 + med * 4 + low * 1) / len(scored)
-    overall = round(min(raw, 10.0), 1)
+    info = sum(1 for s in scored if s.finding.severity == Severity.INFO)
+    total = len(scored)
+    raw_score = (crit * 10 + high * 7 + med * 4 + low * 1) / total
+    overall = round(min(raw_score, 10.0), 1)
 
-    return FinalReport(
-        contract_name="sample_nda.txt (Demo)",
-        generated_at=datetime.now(),
-        summary={"total_clauses": len(scored), "critical_count": crit, "high_count": high,
-                 "medium_count": med, "low_count": low, "overall_score": overall, "contract_type": "NDA"},
-        top_3_actions=[
-            "Demand a carve-out for inventions created on your own time using your own equipment.",
-            "Add an opt-out clause for arbitration — preserve your right to go to court.",
-            "Reduce non-compete to 12 months with geographic scope tied to actual operations.",
-        ],
-        scored_clauses=scored,
-        markdown_report="""# ClauseGuard Risk Analysis Report
-**Contract:** sample_nda.txt
-**Generated:** {date}
-**Risk Score:** {score}/10
-**Contract Type:** NDA
+    dt = datetime.now().strftime('%B %d, %Y at %H:%M')
 
-## Summary
-- Total Clauses: {total}
-- Critical: {crit}
-- High: {high}
-- Medium: {med}
-- Low: {low}
+    markdown = f"""# ClauseGuard Risk Analysis Report
 
-## Top Actions
-1. Demand a carve-out for inventions created on your own time using your own equipment.
-2. Add an opt-out clause for arbitration — preserve your right to go to court.
-3. Reduce non-compete to 12 months with geographic scope tied to actual operations.
+**Contract:** sample_employment_agreement.txt (Demo)
+**Type:** Employment
+**Overall Risk Score:** {overall}/10
+**Generated:** {dt}
 
 ---
-*Generated by ClauseGuard AI*
-""".format(date=datetime.now().strftime('%B %d, %Y'), score=overall, total=len(scored), crit=crit, high=high, med=med, low=low),
+
+## Executive Summary
+
+This employment agreement contains **{crit} critical** and **{high} high-severity** risks that demand immediate attention before signing. The most severe issues involve an overly broad IP assignment clause that claims ownership of personal projects, mandatory arbitration waiving all court rights, and a worldwide non-compete with unlimited company discretion. We strongly recommend negotiating the top 3 actions below.
+
+---
+
+## Top 3 Actions Before Signing
+
+1. **Restrict IP Assignment** — Demand a carve-out excluding personal projects made on your own time and equipment unrelated to company business.
+2. **Add Arbitration Opt-Out** — Request a 30-day window to opt out of binding arbitration and preserve your right to go to court.
+3. **Limit the Non-Compete** — Reduce duration to 12 months and restrict geographic scope to regions where the company actually operates.
+
+---
+
+## Risk Summary
+
+| Severity | Count |
+|----------|-------|
+| 🔴 Critical | {crit} |
+| 🟠 High | {high} |
+| 🟡 Medium | {med} |
+| 🟢 Low | {low} |
+| ℹ️ Info | {info} |
+
+**Total Clauses Analyzed:** {total}
+
+---
+
+## Clause-by-Clause Analysis
+
+"""
+
+    for sc in scored:
+        emoji_map = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🟢", "INFO": "ℹ️"}
+        emoji = emoji_map.get(sc.finding.severity.value, "⚪")
+        markdown += f"""### {sc.clause.clause_type.value} — {emoji} {sc.finding.severity.value}
+
+**Original Text:**
+{sc.clause.raw_text}
+
+**Plain English:**
+{sc.clause.plain_english or 'N/A'}
+
+**Risk Assessment:** {sc.finding.risk_reason}
+
+**Recommended Action:** {sc.finding.recommended_action}
+
+"""
+
+        if sc.finding.safer_clause_version:
+            markdown += f"**Safer Alternative:** {sc.finding.safer_clause_version}\n\n"
+        if sc.finding.negotiation_message:
+            markdown += f"**Negotiation Script:**\n\n{sc.finding.negotiation_message}\n\n"
+        if sc.finding.impact_scenarios:
+            markdown += "**Potential Consequences:**\n"
+            for impact in sc.finding.impact_scenarios:
+                markdown += f"- {impact}\n"
+            markdown += "\n"
+        markdown += "---\n\n"
+
+    markdown += "\n*Generated by ClauseGuard AI • Powered by Qwen2.5 via vLLM on AMD • Not legal advice*\n"
+
+    return FinalReport(
+        contract_name="Sample Employment Agreement (Demo)",
+        generated_at=datetime.now(),
+        summary={
+            "total_clauses": total,
+            "critical_count": crit,
+            "high_count": high,
+            "medium_count": med,
+            "low_count": low,
+            "overall_score": overall,
+            "contract_type": "Employment",
+        },
+        top_3_actions=[
+            "Restrict IP assignment to work directly related to company business, created during work hours using company resources",
+            "Add a 30-day opt-out window for binding arbitration to preserve your right to go to court",
+            "Limit non-compete to 12 months in specific regions where the company has active operations",
+        ],
+        scored_clauses=scored,
+        markdown_report=markdown,
         processed_normally=False,
     )
 

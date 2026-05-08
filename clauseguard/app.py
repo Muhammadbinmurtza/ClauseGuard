@@ -43,6 +43,43 @@ SEVERITY_STYLE = {
     Severity.INFO:     {"badge": "ℹ️ INFO",      "border": "#1e90ff", "bg": "rgba(30,144,255,0.08)",  "color": "#55aaff", "tag_bg": "rgba(30,144,255,0.08)"},
 }
 
+
+def _check_model_connectivity() -> tuple[bool, str]:
+    """Quick connectivity check against the configured model endpoint.
+
+    Returns:
+        (ok, error_message) — ok is True if the endpoint is reachable.
+    """
+    import asyncio
+    from clauseguard.services.model_service import get_client
+    from clauseguard.config.settings import MODEL_NAME
+
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            client = get_client()
+            loop.run_until_complete(
+                asyncio.wait_for(
+                    client.models.list(),
+                    timeout=10,
+                )
+            )
+            return True, ""
+        except asyncio.TimeoutError:
+            return False, "Model endpoint timed out — the vLLM server may be offline or unreachable"
+        except Exception as e:
+            err = str(e)
+            if "ConnectionRefusedError" in err or "Connection refused" in err or "ConnectError" in err:
+                return False, f"Connection refused — vLLM server is not running at the configured BASE_URL"
+            if "Name or service not known" in err or "getaddrinfo" in err.lower():
+                return False, f"Cannot resolve host — check that the BASE_URL is correct"
+            return False, f"Model endpoint error: {err[:120]}"
+        finally:
+            loop.close()
+    except Exception as e:
+        return False, f"Connectivity check failed: {str(e)[:120]}"
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # CUSTOM CSS
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -127,11 +164,18 @@ CUSTOM_CSS = """
     
     .stExpander {
         border: 1px solid rgba(255,255,255,0.06) !important;
-        border-radius: 12px !important;
-        margin-bottom: 0.6rem !important;
+        border-radius: 10px !important;
+        margin-bottom: 0.3rem !important;
         overflow: hidden;
+        transition: all 0.15s ease;
     }
-    .stExpander > div:first-child { border-radius: 12px !important; }
+    .stExpander:hover {
+        border-color: rgba(255,255,255,0.1) !important;
+    }
+    .stExpander > div:first-child {
+        border-radius: 10px !important;
+        background: rgba(255,255,255,0.015);
+    }
     
     .stChatMessage { border-radius: 12px !important; }
     
@@ -427,6 +471,18 @@ def _run_analysis() -> None:
         status_text.markdown("<h3 style='color:#fff'>🔍 Reading file...</h3>", unsafe_allow_html=True)
         raw_text = extract_text(file_bytes, filename)
         st.session_state.copilot_raw_text = raw_text
+
+        status_text.markdown("<h3 style='color:#8ab4f8'>🔗 Testing model connection...</h3>", unsafe_allow_html=True)
+        ok, conn_err = _check_model_connectivity()
+        if not ok:
+            st.session_state.error = f"Cannot connect to model API: {conn_err}"
+            st.session_state.analyzing = False
+            progress_bar.empty()
+            status_text.empty()
+            agent_panel.empty()
+            st.rerun()
+            return
+
         status_text.markdown("<h3 style='color:#8ab4f8'>🤖 Running AI analysis pipeline...</h3>", unsafe_allow_html=True)
 
         def _render_agent_panel():
@@ -467,12 +523,47 @@ def _run_analysis() -> None:
         agent_panel.markdown(_render_agent_panel(), unsafe_allow_html=True)
 
         progress_bar.progress(1.0)
+
+        if report.summary.total_clauses == 0:
+            logger.error("Pipeline produced 0 clauses — model API may be unreachable or returned errors")
+            failed_agents = [
+                a for a in AGENT_NAMES
+                if st.session_state.agent_statuses.get(a) == "failed"
+            ]
+            if failed_agents:
+                st.session_state.error = (
+                    f"Analysis failed — the {failed_agents[0]} agent could not complete. "
+                    "The model API may be unreachable or returned malformed responses. "
+                    "Check that the vLLM endpoint is running at the configured BASE_URL."
+                )
+            else:
+                st.session_state.error = (
+                    "Analysis could not extract any clauses from the document. "
+                    "The model may be unavailable or the document format may be unsupported. "
+                    "Check your model endpoint configuration."
+                )
+            status_text.markdown("<h3 style='color:#ff4444'>❌ Analysis failed</h3>", unsafe_allow_html=True)
+            st.session_state.report = None
+            st.session_state.analyzing = False
+            progress_bar.empty()
+            status_text.empty()
+            agent_panel.empty()
+            st.rerun()
+            return
+
         status_text.markdown("<h3 style='color:#55dd55'>✅ Analysis complete!</h3>", unsafe_allow_html=True)
         st.session_state.report = report
         st.session_state.error = None
         st.session_state.copilot_messages = []
         st.session_state.clause_ai_responses = {}
         st.session_state.generated_emails = {}
+
+        if not report.processed_normally or report.summary.critical_count == 0 and report.summary.high_count == 0 and report.summary.medium_count == 0:
+            st.session_state.error = (
+                "Analysis completed but no significant risks were detected. "
+                "The model responses may have been incomplete — review the "
+                f"report ({report.summary.total_clauses} clauses analyzed) carefully."
+            )
 
     except ValueError as e:
         st.session_state.error = f"Could not process: {e}"
@@ -594,38 +685,72 @@ def _switch_to_chat_with_prompt(prompt_text: str) -> None:
 
 
 def _render_single_clause_card(sc: ScoredClause, style: dict, show_actions: bool = True) -> None:
+    s = style
+    c = sc.clause
+    f = sc.finding
+
     st.markdown(f"""
-    <div style="border-left:4px solid {style['border']};border-radius:0 8px 8px 0;padding-left:1rem;margin-bottom:0.5rem;background:{style['bg']}">
-        <span style="display:inline-block;background:{style['tag_bg']};color:{style['color']};padding:0.2rem 0.7rem;border-radius:20px;font-size:0.72rem;font-weight:700;letter-spacing:0.3px;text-transform:uppercase;margin-right:0.5rem">{style['badge']}</span>
-        <span style="font-weight:600;color:#e0e0e0;font-size:0.95rem">{sc.finding.risk_title}</span>
-        <span style="color:#888;font-size:0.78rem;margin-left:0.5rem">— Clause {sc.clause.id}</span>
+    <div style="
+        background: linear-gradient(135deg, {s['bg']} 0%, rgba(20,22,30,0.6) 100%);
+        border: 1px solid {s['border']}22;
+        border-left: 4px solid {s['border']};
+        border-radius: 0 12px 12px 0;
+        padding: 1.25rem 1.25rem 0.75rem 1.25rem;
+        margin-bottom: 0.5rem;
+    ">
+        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.75rem">
+            <span style="
+                display:inline-flex;align-items:center;gap:4px;
+                background:{s['tag_bg']};
+                color:{s['color']};
+                padding:0.25rem 0.75rem;
+                border-radius:20px;
+                font-size:0.73rem;
+                font-weight:700;
+                letter-spacing:0.4px;
+                text-transform:uppercase;
+                white-space:nowrap;
+            ">{s['badge']}</span>
+            <span style="font-weight:600;color:#e8e8e8;font-size:1rem;line-height:1.3">{f.risk_title}</span>
+        </div>
+        <div style="display:flex;gap:1rem;margin-bottom:0.6rem">
+            <span style="color:#888;font-size:0.75rem">📂 {c.section_heading or ''}</span>
+            <span style="color:#888;font-size:0.75rem">🏷️ {c.clause_type.value}</span>
+            <span style="color:#666;font-size:0.75rem">Clause #{c.id}</span>
+        </div>
     </div>""", unsafe_allow_html=True)
 
-    clause_l, clause_r = st.columns([3, 1])
-    with clause_l:
-        st.markdown(f"**📜 Original Text**")
-        st.markdown(f"<div style='background:#2a2a3a;padding:0.75rem;border-radius:8px;font-family:monospace;font-size:0.9rem;line-height:1.6;color:#e8e8e8;white-space:pre-wrap'>{sc.clause.raw_text}</div>", unsafe_allow_html=True)
-    with clause_r:
-        if sc.clause.section_heading:
-            st.caption(f"📂 Section: {sc.clause.section_heading}")
-        st.caption(f"🏷️ Type: {sc.clause.clause_type.value}")
-        st.markdown(f"""<div style="background:{style['tag_bg']};border-radius:20px;padding:0.25rem 0.9rem;text-align:center;font-size:0.75rem;font-weight:700;color:{style['color']};display:inline-block">{style['badge']}</div>""", unsafe_allow_html=True)
+    with st.expander("📜 View Original Text"):
+        st.markdown(f"<div style='background:#1c1d2a;padding:0.85rem;border-radius:8px;font-family:Consolas,monospace;font-size:0.88rem;line-height:1.65;color:#d0d0d0;white-space:pre-wrap'>{c.raw_text}</div>", unsafe_allow_html=True)
 
-    if sc.clause.plain_english:
-        st.info(f"💬 {sc.clause.plain_english}")
-    st.warning(f"⚠️ {sc.finding.risk_reason}")
-    if sc.finding.recommended_action:
-        st.success(f"✅ {sc.finding.recommended_action}")
+    if c.plain_english:
+        st.markdown(f"""<div style="display:flex;gap:0.5rem;align-items:flex-start;margin:0.5rem 0;padding:0.6rem 0.85rem;background:rgba(30,144,255,0.07);border-radius:8px;border:1px solid rgba(30,144,255,0.12)">
+            <span style="font-size:0.95rem;flex-shrink:0">💬</span>
+            <span style="color:#c0cfe0;font-size:0.9rem;line-height:1.5">{c.plain_english}</span>
+        </div>""", unsafe_allow_html=True)
 
-    if show_actions and sc.finding.severity in (Severity.CRITICAL, Severity.HIGH):
-        col_act1, col_act2 = st.columns(2)
-        with col_act1:
-            if st.button("✏️ Ask AI to Explain", key=f"explain_{sc.clause.id}", use_container_width=True):
-                _switch_to_chat_with_prompt(f"Explain clause {sc.clause.id} ({sc.finding.risk_title}) in simple terms. What does this mean for me?")
-        with col_act2:
-            if st.button("💬 Draft Negotiation", key=f"negotiate_{sc.clause.id}", use_container_width=True):
-                st.session_state.active_tab = 2
-                st.rerun()
+    st.markdown(f"""<div style="display:flex;gap:0.5rem;align-items:flex-start;margin:0.5rem 0;padding:0.6rem 0.85rem;background:{s['bg']};border-radius:8px;border:1px solid {s['border']}18">
+        <span style="font-size:0.95rem;flex-shrink:0">⚠️</span>
+        <div>
+            <div style="color:{s['color']};font-size:0.8rem;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:0.2rem">Risk</div>
+            <div style="color:#d0d0d0;font-size:0.9rem;line-height:1.55">{f.risk_reason}</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    if f.recommended_action:
+        st.markdown(f"""<div style="display:flex;gap:0.5rem;align-items:flex-start;margin:0.5rem 0;padding:0.6rem 0.85rem;background:rgba(50,205,50,0.06);border-radius:8px;border:1px solid rgba(50,205,50,0.12)">
+            <span style="font-size:0.95rem;flex-shrink:0">✅</span>
+            <span style="color:#b0d0b0;font-size:0.9rem;line-height:1.5">{f.recommended_action}</span>
+        </div>""", unsafe_allow_html=True)
+
+    if f.impact_scenarios:
+        with st.expander("⚠️ What Could Happen If You Sign This"):
+            for impact in f.impact_scenarios:
+                st.markdown(f"<div style='background:rgba(255,68,68,0.06);padding:0.4rem 0.75rem;margin:0.15rem 0;border-radius:6px;border-left:3px solid {s['border']};font-size:0.85rem;color:#e0a0a0'>• {impact}</div>", unsafe_allow_html=True)
+
+    if show_actions and f.severity not in (Severity.LOW, Severity.INFO):
+        if st.button("✏️ Ask AI to Explain", key=f"explain_{c.id}", use_container_width=True):
+            _switch_to_chat_with_prompt(f"Explain clause {c.id} ({f.risk_title}) in simple terms. What does this mean for me?")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -723,7 +848,8 @@ def _render_guided_tour() -> None:
                 if st.button("Next ➡️" if step < len(tour_steps) - 1 else "✅ Finish Tour", key=f"tour_next_{step}", use_container_width=True):
                     if step < len(tour_steps) - 1:
                         st.session_state.demo_step = step + 1
-                        st.session_state.active_tab = tour_steps[step + 1]["tab"]
+                        tab_idx = tour_steps[step + 1]["tab"]
+                        st.session_state.active_tab = tab_idx
                     else:
                         st.session_state.guided_demo = False
                     st.rerun()
@@ -762,6 +888,13 @@ def render_issues_summary() -> None:
     all_issues = criticals + highs + mediums
 
     if not all_issues:
+        if not report.processed_normally:
+            st.warning(
+                "⚠️ **Analysis was incomplete** — the AI risk scorer could not evaluate these clauses. "
+                "All clauses are marked as MEDIUM 'Needs Human Review'. "
+                "This typically means the model API is having issues. Check your vLLM endpoint configuration."
+            )
+            return
         st.success("✅ No issues found — all clauses look reasonable. Use the tabs below to explore the full analysis.")
         return
 
@@ -917,7 +1050,7 @@ def render_overview_tab() -> None:
 def render_clauses_tab() -> None:
     report = st.session_state.report
     st.markdown("### 📋 Clause-by-Clause Analysis")
-    st.caption("Expand each clause to see original text, plain English translation, risk assessment, and recommended actions. Critical and high-risk clauses are expanded by default.")
+    st.caption("Each issue below shows the original legal text, plain-English translation, risk assessment, and recommended actions.")
 
     filter_cols = st.columns(5)
     show_crit = filter_cols[0].checkbox("🔴 Critical", value=True)
@@ -930,21 +1063,33 @@ def render_clauses_tab() -> None:
                Severity.MEDIUM: show_med, Severity.LOW: show_low, Severity.INFO: show_info}
 
     default_s = SEVERITY_STYLE[Severity.INFO]
-    displayed = 0
+    issue_num = 0
     for sc in report.scored_clauses:
         sev = sc.finding.severity
         if not visible.get(sev, False):
             continue
-        displayed += 1
+        issue_num += 1
         style = SEVERITY_STYLE.get(sev, default_s)
 
-        with st.expander(f"{style['badge']} — {sc.finding.risk_title}", expanded=(sev in (Severity.CRITICAL, Severity.HIGH))):
-            _render_single_clause_card(sc, style, show_actions=True)
+        st.markdown(f"""
+        <div style="display:flex;align-items:center;gap:0.75rem;margin:1.5rem 0 0.75rem 0">
+            <span style="
+                background:{style['border']};
+                color:#fff;
+                min-width:2rem;height:2rem;
+                border-radius:50%;
+                display:inline-flex;align-items:center;justify-content:center;
+                font-weight:800;font-size:0.9rem;
+            ">#{issue_num}</span>
+            <div style="background:linear-gradient(90deg, {style['border']}44 0%, transparent 100%);height:1px;flex:1"></div>
+        </div>""", unsafe_allow_html=True)
 
-    if displayed == 0:
-        st.info("Select severity levels above to view clauses. Try enabling Critical and High to see the most important clauses that need your attention.")
+        _render_single_clause_card(sc, style, show_actions=True)
+
+    if issue_num == 0:
+        st.info("Select severity levels above to view issues. Try enabling Critical and High to see the most important clauses that need your attention.")
     else:
-        st.caption(f"Showing {displayed} of {report.summary.total_clauses} clauses — use severity filters above to adjust view")
+        st.caption(f"Showing {issue_num} of {report.summary.total_clauses} clauses — use severity filters above to adjust view")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -991,15 +1136,15 @@ def render_negotiation_tab() -> None:
     default_s = SEVERITY_STYLE[Severity.INFO]
 
     st.markdown("### 💬 Negotiation Copilot")
-    st.caption("For Critical and High-risk clauses — each clause shows what you signed vs. a safer alternative, side-by-side. Use the pre-written messages or generate a formal email to send to the other party.")
+    st.caption("Each risky clause shows what you signed vs. a safer alternative, side-by-side. Use the pre-written messages or generate a formal email to send to the other party.")
 
-    high_risk = [sc for sc in report.scored_clauses if sc.finding.severity in (Severity.CRITICAL, Severity.HIGH)]
-    if not high_risk:
-        st.success("✅ No Critical or High-risk clauses to negotiate — this contract looks reasonable! Review the Medium-risk clauses for minor improvements.")
+    negotiable = [sc for sc in report.scored_clauses if sc.finding.severity not in (Severity.LOW, Severity.INFO)]
+    if not negotiable:
+        st.success("✅ No actionable risks detected — this contract looks reasonable!")
     else:
-        st.info(f"📋 **{len(high_risk)} high-risk clauses** flagged for negotiation below")
+        st.info(f"📋 **{len(negotiable)} clauses** flagged for negotiation below")
 
-        for i, sc in enumerate(high_risk):
+        for i, sc in enumerate(negotiable):
             style = SEVERITY_STYLE.get(sc.finding.severity, default_s)
             sev_label = sc.finding.severity.value
 
@@ -1044,31 +1189,16 @@ def render_negotiation_tab() -> None:
             with st.expander("📧 Generate Formal Email to Send"):
                 _render_email_card(sc)
 
-            if i < len(high_risk) - 1:
+            if i < len(negotiable) - 1:
                 st.divider()
 
-    st.markdown("")
     safe_contract = _build_safer_contract(report)
-    st.markdown("### 📝 Download Your Safer Contract")
-    st.caption("Every Critical and High-risk clause has been replaced with a negotiated safer version. All other clauses remain unchanged. Download and share with the other party.")
-
-    dl_col1, dl_col2 = st.columns([2, 1])
-    with dl_col1:
-        st.download_button(
-            "📥 Download Safer Contract (.txt)",
-            data=safe_contract,
-            file_name=f"safer_{report.contract_name.replace('.txt','').replace('.pdf','').replace('.docx','')}.txt",
-            mime="text/plain",
-            use_container_width=True,
-        )
-    with dl_col2:
-        if st.button("📋 Preview Safer Contract", use_container_width=True, key="preview_safer"):
-            preview_max = 3500
-            preview_text = safe_contract[:preview_max]
-            if len(safe_contract) > preview_max:
-                preview_text += f"\n\n... (showing first {preview_max} chars of {len(safe_contract)} — download for full contract)"
-            with st.expander("Safer Contract Preview", expanded=True):
-                st.code(preview_text, language=None)
+    with st.expander("📋 Preview Safer Contract"):
+        preview_max = 3500
+        preview_text = safe_contract[:preview_max]
+        if len(safe_contract) > preview_max:
+            preview_text += f"\n\n... (showing first {preview_max} chars of {len(safe_contract)} — download full contract at bottom of page)"
+        st.code(preview_text, language=None)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1242,12 +1372,12 @@ def render_sidebar() -> None:
         st.markdown("""<div style="background:#1e2a3a;border-radius:12px;padding:1.25rem;border:1px solid #3a4a5a">
             <h4 style="margin:0 0 0.5rem 0;color:#fff">⚡ Powered by</h4>
             <p style="font-size:0.85rem;color:#ccc;margin:0;line-height:1.8">
-                DeepSeek-V3 on AMD MI300X<br>
-                OpenAI Agents SDK<br>
+                Qwen2.5 via vLLM on AMD MI300X<br>
+                OpenAI-compatible API<br>
                 Streamlit • Python 3.10+
             </p>
             <div style="margin-top:0.5rem;padding:0.3rem 0.5rem;background:#1a0533;border-radius:6px;border:1px solid #667eea;text-align:center;font-size:0.7rem;color:#aabbcc">
-                🏷️ AMD Developer Hackathon 2025
+                🏷️ AMD Developer Cloud
             </div>
         </div>""", unsafe_allow_html=True)
 
@@ -1314,7 +1444,7 @@ if st.session_state.analyzing and st.session_state.uploaded_bytes:
 if st.session_state.error:
     st.error(st.session_state.error)
     if "DEEPSEEK_API_KEY" in st.session_state.error:
-        st.info("💡 To use ClauseGuard, create a `.env` file with your `DEEPSEEK_API_KEY`. See the README for setup instructions.")
+        st.info("💡 To use ClauseGuard, set the `BASE_URL` and `MODEL_NAME` in your `.env` file to point to your Qwen/vLLM endpoint. See the README for setup instructions.")
 
 if st.session_state.report:
     report = st.session_state.report
@@ -1328,7 +1458,6 @@ if st.session_state.report:
         "Navigate between sections",
         TAB_NAMES,
         index=min(st.session_state.get("active_tab", 0), len(TAB_NAMES) - 1),
-        key=TAB_SESSION_KEY,
         label_visibility="collapsed",
         horizontal=True,
     )
@@ -1345,13 +1474,41 @@ if st.session_state.report:
         render_chat_tab()
 
     st.divider()
-    st.download_button(
-        "📥 Download Full Report (.md)",
-        data=report.markdown_report or "# ClauseGuard Report\n\nRun analysis first.",
-        file_name=f"clauseguard_report_{report.contract_name.replace('.','_')}.md",
-        mime="text/markdown",
-        use_container_width=True,
-    )
+    st.markdown("### 📥 Download Your Report")
+    st.caption("Download the full analysis in your preferred format to share with legal counsel or reference later.")
+
+    dl_cols = st.columns(3)
+    with dl_cols[0]:
+        st.download_button(
+            "📝 Download Markdown Report",
+            data=report.markdown_report or "# ClauseGuard Report\n\nRun analysis first.",
+            file_name=f"clauseguard_report_{report.contract_name.replace('.','_')}.md",
+            mime="text/markdown",
+            use_container_width=True,
+        )
+    with dl_cols[1]:
+        safe_contract = _build_safer_contract(report)
+        st.download_button(
+            "🛡️ Download Safer Contract",
+            data=safe_contract,
+            file_name=f"safer_{report.contract_name.replace('.txt','').replace('.pdf','').replace('.docx','')}.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
+    with dl_cols[2]:
+        csv_lines = ["Clause ID,Type,Severity,Risk Title,Risk Reason,Recommended Action,Plain English,Negotiation Message"]
+        for sc in report.scored_clauses:
+            csv_lines.append(
+                f'"{sc.clause.id}","{sc.clause.clause_type.value}","{sc.finding.severity.value}","{sc.finding.risk_title}","{sc.finding.risk_reason}","{sc.finding.recommended_action}","{sc.clause.plain_english or ""}","{sc.finding.negotiation_message or ""}"'
+            )
+        st.download_button(
+            "📊 Download CSV Data",
+            data="\n".join(csv_lines),
+            file_name=f"clauseguard_data_{report.contract_name.replace('.','_')}.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+
     st.caption(
         f"Generated {report.generated_at.strftime('%B %d, %Y at %H:%M')} "
         f"• {s.contract_type} • {s.total_clauses} clauses analyzed"

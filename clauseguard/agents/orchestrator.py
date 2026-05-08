@@ -7,6 +7,7 @@ from typing import Any, Callable, List
 try:
     from agents import Agent as SdkAgent
     from agents import Runner as SdkRunner
+
     _SDK_AVAILABLE = True
 except ImportError:
     _SDK_AVAILABLE = False
@@ -18,6 +19,8 @@ from clauseguard.agents.risk_scorer import run_risk_scorer
 from clauseguard.agents.translator import run_translator
 from clauseguard.config.settings import MAX_CLAUSES, TIMEOUT_SECONDS
 from clauseguard.models.clause import ClauseList
+from clauseguard.models.findings import ScoredClause
+from clauseguard.models.report import FinalReport
 
 # ── Live Agent Event System ──
 # The orchestrator emits events via a callback so the UI can show live status.
@@ -44,8 +47,7 @@ def _emit(agent: str, status: str, **details: Any) -> None:
         _live_event_callback(agent, status, details)
     except Exception:
         pass
-from clauseguard.models.findings import ScoredClause
-from clauseguard.models.report import FinalReport
+
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +55,10 @@ logger = logging.getLogger(__name__)
 async def run_pipeline(file_content: str, filename: str) -> FinalReport:
     """Execute the full 5-agent pipeline on contract text.
 
-    Pipeline: Extractor → Classifier → Risk Scorer → Translator → Reporter
+    Pipeline: Extractor -> Classifier -> Risk Scorer -> Translator -> Reporter
 
     Uses OpenAI Agents SDK handoff() for agent orchestration when available.
-    Each agent call is wrapped in try/except with 30s timeout.
+    Each agent call is wrapped in try/except with timeout.
     If an agent fails, the pipeline continues with partial data.
     Reporter always runs and returns a FinalReport.
 
@@ -90,6 +92,10 @@ async def run_pipeline(file_content: str, filename: str) -> FinalReport:
             scored_clauses = await _step_translate(scored_clauses)
         else:
             partial = True
+            logger.warning("Risk scorer produced no results — using fallback severity (MEDIUM) for all clauses")
+            scored_clauses = _build_fallback_scored_clauses(clause_list)
+            if scored_clauses:
+                scored_clauses = await _step_translate(scored_clauses)
     else:
         partial = True
 
@@ -97,10 +103,11 @@ async def run_pipeline(file_content: str, filename: str) -> FinalReport:
     return await _step_report(scored_clauses, filename, contract_type, partial, truncation_note)
 
 
-async def _run_sdk_pipeline(file_content: str, filename: str) -> FinalReport:
+async def _run_sdk_pipeline(file_content: str, filename: str) -> FinalReport | None:
     """Run the pipeline using OpenAI Agents SDK for handoff demonstration.
 
-    Handoff chain: Extractor → Classifier → Risk Scorer → Translator → Reporter
+    Handoff chain: Extractor -> Classifier -> Risk Scorer -> Translator -> Reporter
+    Returns None if SDK pipeline cannot complete, triggering fallback to direct calls.
     """
     try:
         from clauseguard.config.prompts import (
@@ -143,7 +150,7 @@ async def _run_sdk_pipeline(file_content: str, filename: str) -> FinalReport:
         risk_scorer_agent.handoffs = [translator_agent]
         translator_agent.handoffs = [reporter_agent]
 
-        logger.info("SDK handoff chain: Extractor → Classifier → Risk Scorer → Translator → Reporter")
+        logger.info("SDK handoff chain: Extractor -> Classifier -> Risk Scorer -> Translator -> Reporter")
         result = await SdkRunner.run(
             extractor_agent,
             f"Extract all clauses from this contract file '{filename}':\n\n{file_content}",
@@ -165,6 +172,31 @@ def _check_truncation(clause_list: ClauseList, original_text: str) -> str:
             f"of approximately {word_count} words. Some clauses may not appear in this report."
         )
     return ""
+
+
+def _build_fallback_scored_clauses(clause_list: ClauseList) -> List[ScoredClause]:
+    """Build scored clauses with MEDIUM severity when the risk scorer fails.
+
+    This ensures users still see their clauses in the report even when the AI
+    risk analysis could not complete, rather than showing 'no issues' misleadingly.
+    """
+    from clauseguard.models.findings import RiskFinding, ScoredClause, Severity
+
+    fallback: List[ScoredClause] = []
+    for clause in clause_list.clauses:
+        finding = RiskFinding(
+            clause_id=clause.id,
+            severity=Severity.MEDIUM,
+            risk_title="Needs Human Review",
+            risk_reason=(
+                f"The automated risk analyzer could not evaluate this clause. "
+                f"Type: {clause.clause_type.value}. "
+                f"Please review manually or consult legal counsel."
+            ),
+            recommended_action="Review this clause manually — the AI risk scorer could not complete.",
+        )
+        fallback.append(ScoredClause(clause=clause, finding=finding))
+    return fallback
 
 
 async def _step_extract(file_content: str, filename: str) -> ClauseList:

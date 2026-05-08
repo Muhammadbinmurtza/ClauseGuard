@@ -2,27 +2,20 @@
 
 This agent handles multi-turn conversations where users ask questions about
 their analyzed contract. It uses the full contract text and the completed
-clause analysis report as context, and responds via the DeepSeek API.
+clause analysis report as context, and responds via the Qwen model.
 """
 
 import asyncio
-import json
 import logging
 from typing import Any, Dict, List
 
-from openai import AsyncOpenAI
-
 from clauseguard.config.copilot_prompts import COPILOT_SYSTEM_PROMPT
-from clauseguard.config.settings import BASE_URL, DEEPSEEK_API_KEY, MAX_TOKENS, MODEL_NAME, TEMPERATURE, TIMEOUT_SECONDS
 from clauseguard.models.report import FinalReport
+from clauseguard.services.model_service import call_model_chat
 
 logger = logging.getLogger(__name__)
 
 CHAT_TIMEOUT_SECONDS = 60
-
-
-def _build_client() -> AsyncOpenAI:
-    return AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
 
 
 def build_contract_context(full_contract_text: str, report: FinalReport) -> str:
@@ -141,27 +134,8 @@ async def run_copilot(
     Returns:
         The assistant's text response, or an error message on failure.
     """
-    client = _build_client()
     messages = build_chat_messages(COPILOT_SYSTEM_PROMPT, contract_context, chat_history, user_message)
-
-    try:
-        response = await asyncio.wait_for(
-            client.chat.completions.create(
-                model=MODEL_NAME,
-                messages=messages,
-                temperature=TEMPERATURE,
-                max_tokens=MAX_TOKENS,
-            ),
-            timeout=CHAT_TIMEOUT_SECONDS,
-        )
-        content = response.choices[0].message.content
-        return content or "I'm sorry, I couldn't generate a response. Please try again."
-    except asyncio.TimeoutError:
-        logger.error("Copilot chat timed out")
-        return "I'm sorry, the request timed out. Please try a shorter question or try again."
-    except Exception as e:
-        logger.error("Copilot chat failed: %s", e)
-        return f"I'm sorry, something went wrong: {e}"
+    return await call_model_chat(messages, timeout=CHAT_TIMEOUT_SECONDS)
 
 
 # ── Python 3.10+ compat: same function available as synchronous wrapper for Streamlit ──

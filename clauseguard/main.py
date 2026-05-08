@@ -41,7 +41,7 @@ def main() -> None:
     except ValueError as e:
         logger.error("Configuration error: %s", e)
         print(f"Error: {e}")
-        print("Create a .env file with your DEEPSEEK_API_KEY or set it as an environment variable.")
+        print("Create a .env file with your model endpoint settings or set them as environment variables.")
         sys.exit(1)
 
     file_path = Path(args.file)

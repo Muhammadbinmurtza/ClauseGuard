@@ -1,16 +1,13 @@
-"""Agent 4: Translator — writes plain English explanations and actions."""
+"""Agent 4: Translator — writes plain English explanations and negotiation support."""
 
-import asyncio
 import json
 import logging
 from typing import List
 
-from openai import AsyncOpenAI
-
 from clauseguard.config.prompts import TRANSLATOR_SYSTEM_PROMPT
-from clauseguard.config.settings import BASE_URL, DEEPSEEK_API_KEY, MAX_TOKENS, MODEL_NAME, TEMPERATURE, TIMEOUT_SECONDS
 from clauseguard.models.clause import Clause, ClauseType
 from clauseguard.models.findings import RiskFinding, ScoredClause, Severity
+from clauseguard.services.model_service import call_model, clean_json_response
 
 logger = logging.getLogger(__name__)
 MAX_RETRIES = 1
@@ -25,8 +22,6 @@ async def run_translator(scored_clauses: List[ScoredClause]) -> List[ScoredClaus
     Returns:
         Updated ScoredClause list with plain_english and recommended_action filled in.
     """
-    client = _build_client()
-
     scored_json = [
         {
             "clause": sc.clause.model_dump(),
@@ -36,63 +31,23 @@ async def run_translator(scored_clauses: List[ScoredClause]) -> List[ScoredClaus
     ]
     input_json = json.dumps(scored_json, indent=2)
 
-    content = await _call_with_retry(
-        client,
+    content = await call_model(
         system_prompt=TRANSLATOR_SYSTEM_PROMPT,
         user_prompt=f"Translate these clauses into plain English:\n{input_json}",
         agent_name="Translator",
+        max_retries=MAX_RETRIES,
     )
+
+    if content is None:
+        logger.warning("Translator produced no valid output, returning original clauses")
+        return scored_clauses
 
     return _parse_response(content, scored_clauses)
 
 
-async def _call_with_retry(
-    client: AsyncOpenAI,
-    system_prompt: str,
-    user_prompt: str,
-    agent_name: str,
-) -> str | None:
-    last_error = None
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            response = await asyncio.wait_for(
-                client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    temperature=TEMPERATURE,
-                    max_tokens=MAX_TOKENS,
-                ),
-                timeout=TIMEOUT_SECONDS,
-            )
-            content = response.choices[0].message.content or ""
-            json.loads(_clean_json_response(content))
-            return content
-        except json.JSONDecodeError as e:
-            last_error = str(e)
-            if attempt < MAX_RETRIES:
-                logger.warning("%s returned malformed JSON, retrying...", agent_name)
-                user_prompt += "\n\nIMPORTANT: Output ONLY raw JSON."
-        except asyncio.TimeoutError:
-            logger.error("%s agent timed out", agent_name)
-            return None
-        except Exception as e:
-            logger.error("%s agent failed: %s", agent_name, e)
-            return None
-    logger.error("%s failed: %s", agent_name, last_error)
-    return None
-
-
-def _build_client() -> AsyncOpenAI:
-    """Build an AsyncOpenAI client configured for DeepSeek."""
-    return AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
-
-
 def _parse_response(content: str, original: List[ScoredClause]) -> List[ScoredClause]:
-    """Parse translator response and merge plain_english + recommended_action into originals."""
-    cleaned = _clean_json_response(content)
+    """Parse translator response and merge plain_english + actions into originals."""
+    cleaned = clean_json_response(content)
     data = json.loads(cleaned)
 
     items = data if isinstance(data, list) else [data]
@@ -166,15 +121,3 @@ def _build_scored_clause_from_data(clause_data: dict, finding_data: dict) -> Sco
     )
 
     return ScoredClause(clause=clause, finding=finding)
-
-
-def _clean_json_response(content: str) -> str:
-    """Strip markdown fences from LLM JSON output."""
-    content = content.strip()
-    if content.startswith("```json"):
-        content = content[7:]
-    elif content.startswith("```"):
-        content = content[3:]
-    if content.endswith("```"):
-        content = content[:-3]
-    return content.strip()

@@ -1,6 +1,7 @@
 """ClauseGuard configuration package."""
 
 from clauseguard.config.settings import (
+    API_KEY,
     BASE_URL,
     DEEPSEEK_API_KEY,
     MAX_CLAUSES,
@@ -20,6 +21,7 @@ from clauseguard.config.prompts import (
 from clauseguard.config.copilot_prompts import COPILOT_SYSTEM_PROMPT
 
 __all__ = [
+    "API_KEY",
     "BASE_URL",
     "CLASSIFIER_SYSTEM_PROMPT",
     "COPILOT_SYSTEM_PROMPT",

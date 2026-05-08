@@ -1,17 +1,15 @@
 """Agent 5: Reporter — compiles the final risk report."""
 
-import asyncio
 import json
 import logging
 from datetime import datetime
 from typing import List
 
-from openai import AsyncOpenAI
-
 from clauseguard.config.prompts import REPORTER_SYSTEM_PROMPT
-from clauseguard.config.settings import BASE_URL, DEEPSEEK_API_KEY, MAX_TOKENS, MODEL_NAME, TEMPERATURE, TIMEOUT_SECONDS
-from clauseguard.models.findings import RiskFinding, ScoredClause, Severity
+from clauseguard.config.settings import MODEL_NAME, TEMPERATURE
+from clauseguard.models.findings import ScoredClause, Severity
 from clauseguard.models.report import FinalReport, RiskSummary
+from clauseguard.services.model_service import call_model, clean_json_response
 
 logger = logging.getLogger(__name__)
 MAX_RETRIES = 1
@@ -40,7 +38,6 @@ async def run_reporter(
     summary = _build_summary(sorted_clauses, contract_type)
     top_3 = _extract_top_actions(sorted_clauses)
 
-    # Build markdown programmatically — faster and more reliable than LLM generation
     markdown = _build_markdown_programmatically(
         sorted_clauses, contract_name, contract_type, summary, top_3
     )
@@ -111,85 +108,6 @@ def _extract_top_actions(scored_clauses: List[ScoredClause]) -> List[str]:
     return actions[:3]
 
 
-async def _generate_markdown(
-    scored_clauses: List[ScoredClause],
-    contract_name: str,
-    contract_type: str,
-    summary: RiskSummary,
-    top_3: List[str],
-) -> str:
-    """Use LLM to generate the final markdown report, or build it programmatically."""
-    client = _build_client()
-
-    exec_summary_data = _build_executive_summary_payload(scored_clauses, summary, top_3)
-
-    for attempt in range(MAX_RETRIES + 1):
-        try:
-            response = await asyncio.wait_for(
-                client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=[
-                        {"role": "system", "content": REPORTER_SYSTEM_PROMPT},
-                        {"role": "user", "content": json.dumps(exec_summary_data, indent=2)},
-                    ],
-                    temperature=TEMPERATURE,
-                    max_tokens=MAX_TOKENS,
-                ),
-                timeout=TIMEOUT_SECONDS,
-            )
-            content = response.choices[0].message.content or ""
-            clean = _clean_json_response(content)
-
-            try:
-                data = json.loads(clean)
-                llm_markdown = data.get("markdown_report", "")
-                if llm_markdown and len(llm_markdown) > 100:
-                    return llm_markdown
-            except (json.JSONDecodeError, KeyError):
-                if attempt < MAX_RETRIES:
-                    exec_summary_data["retry"] = True
-                    continue
-                break
-        except asyncio.TimeoutError:
-            logger.warning("Reporter LLM call timed out, using programmatic fallback")
-            break
-        except Exception as e:
-            logger.error("Reporter LLM call failed: %s", e)
-            break
-
-    return _build_markdown_programmatically(
-        scored_clauses, contract_name, contract_type, summary, top_3
-    )
-
-
-def _build_executive_summary_payload(
-    scored_clauses: List[ScoredClause],
-    summary: RiskSummary,
-    top_3: List[str],
-) -> dict:
-    """Build payload for the LLM to generate the executive summary and markdown."""
-    return {
-        "contract_name": "",
-        "contract_type": summary.contract_type,
-        "summary": summary.model_dump(),
-        "top_3_actions": top_3,
-        "scored_clauses": [
-            {
-                "clause": {
-                    "id": sc.clause.id,
-                    "raw_text": sc.clause.raw_text[:300],
-                    "plain_english": sc.clause.plain_english,
-                    "clause_type": sc.clause.clause_type.value,
-                    "section_heading": sc.clause.section_heading,
-                    "position": sc.clause.position,
-                },
-                "finding": sc.finding.model_dump(),
-            }
-            for sc in scored_clauses
-        ],
-    }
-
-
 def _build_markdown_programmatically(
     scored_clauses: List[ScoredClause],
     contract_name: str,
@@ -197,7 +115,7 @@ def _build_markdown_programmatically(
     summary: RiskSummary,
     top_3: List[str],
 ) -> str:
-    """Build the markdown report programmatically as fallback."""
+    """Build the markdown report programmatically."""
     generated_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     lines: List[str] = [
@@ -218,6 +136,8 @@ def _build_markdown_programmatically(
     for i, action in enumerate(top_3, 1):
         lines.append(f"{i}. {action}")
 
+    info_count = summary.total_clauses - summary.critical_count - summary.high_count - summary.medium_count - summary.low_count
+
     lines.extend([
         "",
         "## Risk Summary",
@@ -227,7 +147,7 @@ def _build_markdown_programmatically(
         f"| 🟠 High | {summary.high_count} |",
         f"| 🟡 Medium | {summary.medium_count} |",
         f"| 🟢 Low | {summary.low_count} |",
-        f"| ℹ️ Info | {summary.total_clauses - summary.critical_count - summary.high_count - summary.medium_count - summary.low_count} |",
+        f"| ℹ️ Info | {max(info_count, 0)} |",
         "",
         "---",
         "",
@@ -283,20 +203,3 @@ def _severity_emoji(severity: Severity) -> str:
         Severity.INFO: "ℹ️",
     }
     return emoji_map.get(severity, "⚪")
-
-
-def _build_client() -> AsyncOpenAI:
-    """Build an AsyncOpenAI client configured for DeepSeek."""
-    return AsyncOpenAI(api_key=DEEPSEEK_API_KEY, base_url=BASE_URL)
-
-
-def _clean_json_response(content: str) -> str:
-    """Strip markdown fences from LLM JSON output."""
-    content = content.strip()
-    if content.startswith("```json"):
-        content = content[7:]
-    elif content.startswith("```"):
-        content = content[3:]
-    if content.endswith("```"):
-        content = content[:-3]
-    return content.strip()

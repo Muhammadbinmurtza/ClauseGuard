@@ -526,22 +526,25 @@ def _run_analysis() -> None:
 
         if report.summary.total_clauses == 0:
             logger.error("Pipeline produced 0 clauses — model API may be unreachable or returned errors")
-            failed_agents = [
-                a for a in AGENT_NAMES
-                if st.session_state.agent_statuses.get(a) == "failed"
-            ]
-            if failed_agents:
-                st.session_state.error = (
-                    f"Analysis failed — the {failed_agents[0]} agent could not complete. "
-                    "The model API may be unreachable or returned malformed responses. "
-                    "Check that the vLLM endpoint is running at the configured BASE_URL."
-                )
+            if report.error_message:
+                st.session_state.error = report.error_message
             else:
-                st.session_state.error = (
-                    "Analysis could not extract any clauses from the document. "
-                    "The model may be unavailable or the document format may be unsupported. "
-                    "Check your model endpoint configuration."
-                )
+                failed_agents = [
+                    a for a in AGENT_NAMES
+                    if st.session_state.agent_statuses.get(a) == "failed"
+                ]
+                if failed_agents:
+                    st.session_state.error = (
+                        f"Analysis failed — the {failed_agents[0]} agent could not complete. "
+                        "The model API may be unreachable or returned malformed responses. "
+                        "Check that the vLLM endpoint is running at the configured BASE_URL."
+                    )
+                else:
+                    st.session_state.error = (
+                        "Analysis could not extract any clauses from the document. "
+                        "The model may be unavailable or the document format may be unsupported. "
+                        "Check your model endpoint configuration."
+                    )
             status_text.markdown("<h3 style='color:#ff4444'>❌ Analysis failed</h3>", unsafe_allow_html=True)
             st.session_state.report = None
             st.session_state.analyzing = False

@@ -64,6 +64,65 @@ def clean_json_response(content: str) -> str:
     return content.strip()
 
 
+def repair_json(content: str) -> str | None:
+    """Attempt to repair common JSON formatting issues from smaller LLMs.
+
+    Tries increasingly aggressive fixes and returns the repaired string,
+    or None if the content cannot be salvaged.
+    """
+    original = content.strip()
+    attempts: list[str] = [original]
+
+    if "{" in content:
+        start = content.index("{")
+        end = content.rindex("}")
+        clipped = content[start:end + 1]
+        if clipped != original:
+            attempts.append(clipped)
+    if "[" in content:
+        start = content.index("[")
+        end = content.rindex("]")
+        clipped = content[start:end + 1]
+        if clipped not in attempts:
+            attempts.append(clipped)
+
+    for prefix in ('{"clauses"', '{"contract"', '{"clause"'):
+        for attempt in attempts:
+            if attempt.endswith(prefix[:-1]):
+                fixed = attempt + ']}'
+                if fixed not in attempts:
+                    attempts.append(fixed)
+            if attempt.rstrip(",").endswith(prefix[:-1]):
+                fixed = attempt.rstrip(",") + ']}'
+                if fixed not in attempts:
+                    attempts.append(fixed)
+
+    for attempt in attempts:
+        try:
+            json.loads(attempt)
+            return attempt
+        except json.JSONDecodeError:
+            continue
+
+    for attempt in attempts:
+        try:
+            repaired = attempt.rstrip(",\n\r\t ") + "]}"
+            json.loads(repaired)
+            return repaired
+        except json.JSONDecodeError:
+            continue
+
+    for attempt in attempts:
+        try:
+            repaired = "{" + attempt.strip().lstrip("{") + "]}"
+            json.loads(repaired)
+            return repaired
+        except json.JSONDecodeError:
+            continue
+
+    return None
+
+
 async def call_model(
     system_prompt: str,
     user_prompt: str,
@@ -125,6 +184,11 @@ async def call_model(
             last_error = str(e)
             preview = content[:200] if 'content' in dir() else "(no content)"
             logger.warning("%s returned malformed JSON (attempt %d): %s | preview: %s", agent_name, attempt + 1, e, preview)
+            if 'content' in dir():
+                repaired = repair_json(content)
+                if repaired:
+                    logger.info("%s JSON was repaired automatically", agent_name)
+                    return repaired
             if attempt < max_retries:
                 logger.warning("%s returned malformed JSON, retrying...", agent_name)
                 user_prompt += "\n\nIMPORTANT: Output ONLY raw JSON. No markdown, no explanation."

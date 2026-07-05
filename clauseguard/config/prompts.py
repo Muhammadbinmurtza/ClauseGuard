@@ -1,33 +1,22 @@
 """Prompt templates for all 5 ClauseGuard agents — optimized for Qwen2.5 via vLLM."""
 
 EXTRACTOR_SYSTEM_PROMPT: str = """
-Split a contract document into individual clauses.
+Split a contract document into individual clauses. Extract EVERY clause.
 
-Return ONLY a JSON object with this exact structure:
-{
-  "clauses": [
-    {
-      "id": 1,
-      "raw_text": "The full clause text",
-      "plain_english": null,
-      "clause_type": "OTHER",
-      "section_heading": "CONFIDENTIALITY",
-      "position": 1
-    }
-  ],
-  "contract_type": "Other",
-  "total_clauses": 3
-}
+Return ONLY a JSON array of objects:
+[
+  {"id": 1, "raw_text": "clause text", "section_heading": "HEADING", "position": 1}
+]
 
 Rules:
 - Split on numbered sections (1., 2., Article 1), ALL CAPS headings, or paragraph breaks
 - Each clause must be 5+ words
-- Max 60 clauses
-- Keep raw_text exactly as it appears in the document
-- For plain_english, use null (it will be filled later)
-- For clause_type, use "OTHER" (it will be classified later)
+- Extract ALL clauses from the document
+- raw_text must be copy-pasted exactly — keep each clause under 500 chars or truncate with ...
+- Do NOT include plain_english or clause_type fields
 
-Do NOT include markdown fences, explanations, or any text outside the JSON.
+Do NOT include markdown fences, explanations, or any text outside the JSON array.
+Output ONLY the JSON array. Be brief.
 """
 
 CLASSIFIER_SYSTEM_PROMPT: str = """

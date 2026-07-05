@@ -19,7 +19,7 @@ MODEL_NAME: str = os.environ.get(
     "MODEL_NAME",
     os.environ.get("VLLM_MODEL_NAME", "Qwen/Qwen2.5-1.5B-Instruct"),
 )
-MAX_TOKENS: Final[int] = int(os.environ.get("MAX_TOKENS", "4096"))
+MAX_TOKENS: Final[int] = int(os.environ.get("MAX_TOKENS", "16384"))
 TIMEOUT_SECONDS: Final[int] = int(os.environ.get("TIMEOUT_SECONDS", "120"))
 MAX_CLAUSES: Final[int] = 60
 

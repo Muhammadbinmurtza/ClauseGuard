@@ -67,3 +67,6 @@ class FinalReport(BaseModel):
     truncation_note: str = Field(
         "", description="Note about truncation if contract exceeded clause limit"
     )
+    error_message: str = Field(
+        "", description="Error message if the pipeline failed partially or fully"
+    )

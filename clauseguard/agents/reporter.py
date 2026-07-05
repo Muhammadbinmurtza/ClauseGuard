@@ -21,6 +21,7 @@ async def run_reporter(
     contract_type: str,
     partial: bool = False,
     truncation_note: str = "",
+    error_message: str = "",
 ) -> FinalReport:
     """Compile all analysis into a structured FinalReport.
 
@@ -30,6 +31,7 @@ async def run_reporter(
         contract_type: Detected type of the contract.
         partial: Whether this is a partial report due to agent failures.
         truncation_note: Note about document truncation if contract exceeded clause limit.
+        error_message: Error message if the pipeline failed partially or fully.
 
     Returns:
         A complete FinalReport with summary, actions, and markdown.
@@ -51,6 +53,7 @@ async def run_reporter(
         markdown_report=markdown,
         processed_normally=not partial,
         truncation_note=truncation_note,
+        error_message=error_message,
     )
 
 

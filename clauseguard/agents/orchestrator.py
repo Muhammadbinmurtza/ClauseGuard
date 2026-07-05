@@ -73,6 +73,7 @@ async def run_pipeline(file_content: str, filename: str) -> FinalReport:
     scored_clauses: List[ScoredClause] = []
     partial = False
     truncation_note = ""
+    error_messages: List[str] = []
 
     if _SDK_AVAILABLE:
         logger.info("OpenAI Agents SDK handoff pipeline active")
@@ -83,6 +84,8 @@ async def run_pipeline(file_content: str, filename: str) -> FinalReport:
     clause_list = await _step_extract(file_content, filename)
     if clause_list.total_clauses > 0:
         truncation_note = _check_truncation(clause_list, file_content)
+        if truncation_note:
+            error_messages.append(truncation_note)
         if clause_list.total_clauses >= MAX_CLAUSES:
             logger.warning("Document truncated to %d clauses (max %d)", clause_list.total_clauses, MAX_CLAUSES)
 
@@ -92,15 +95,23 @@ async def run_pipeline(file_content: str, filename: str) -> FinalReport:
             scored_clauses = await _step_translate(scored_clauses)
         else:
             partial = True
+            error_messages.append("Risk scorer produced no results — using fallback MEDIUM severity for all clauses")
             logger.warning("Risk scorer produced no results — using fallback severity (MEDIUM) for all clauses")
             scored_clauses = _build_fallback_scored_clauses(clause_list)
             if scored_clauses:
                 scored_clauses = await _step_translate(scored_clauses)
     else:
         partial = True
+        error_messages.append(
+            "The Extractor agent could not parse the document. "
+            "This usually means the model returned malformed JSON after all retry attempts. "
+            "The Qwen 1.5B model may be too small for complex document extraction — "
+            "try with a larger model or a shorter document."
+        )
 
     contract_type = clause_list.contract_type if clause_list.contract_type else "Other"
-    return await _step_report(scored_clauses, filename, contract_type, partial, truncation_note)
+    error_str = "; ".join(error_messages) if error_messages else ""
+    return await _step_report(scored_clauses, filename, contract_type, partial, truncation_note, error_str)
 
 
 async def _run_sdk_pipeline(file_content: str, filename: str) -> FinalReport | None:
@@ -163,14 +174,31 @@ async def _run_sdk_pipeline(file_content: str, filename: str) -> FinalReport | N
 
 
 def _check_truncation(clause_list: ClauseList, original_text: str) -> str:
-    """Check if the document was truncated due to size limits."""
-    if clause_list.total_clauses >= MAX_CLAUSES:
-        word_count = len(original_text.split())
+    """Check if the document was truncated due to size or token limits."""
+    cl = clause_list.total_clauses
+    word_count = len(original_text.split())
+
+    if cl >= MAX_CLAUSES:
         return (
             f"Document exceeded maximum clause limit ({MAX_CLAUSES}). "
             f"Only the first ~{MAX_CLAUSES} clauses were processed from a document "
             f"of approximately {word_count} words. Some clauses may not appear in this report."
         )
+
+    if cl <= 5 and word_count > 500:
+        return (
+            f"Only {cl} clauses were extracted from a {word_count}-word document. "
+            f"This likely indicates the LLM response was truncated due to token limits. "
+            f"The analysis may be incomplete — consider increasing MAX_TOKENS."
+        )
+
+    if word_count > 0 and (word_count / cl) > 300 and cl < 15:
+        return (
+            f"Only {cl} clauses extracted from {word_count} words "
+            f"(~{word_count // cl} words per clause). "
+            f"Some clauses may have been missed due to response truncation."
+        )
+
     return ""
 
 
@@ -293,15 +321,16 @@ async def _step_report(
     contract_type: str,
     partial: bool = False,
     truncation_note: str = "",
+    error_message: str = "",
 ) -> FinalReport:
     """Run the Reporter agent with error handling. No outer timeout — internal timeouts handle LLM calls."""
     try:
         logger.info("Building final report...")
         _emit("Reporter", "running", message="Compiling final risk report")
-        result = await run_reporter(scored_clauses, filename, contract_type, partial, truncation_note)
+        result = await run_reporter(scored_clauses, filename, contract_type, partial, truncation_note, error_message)
         _emit("Reporter", "completed", message=f"Report ready — score: {result.summary.overall_score}/10")
         return result
     except Exception as e:
         _emit("Reporter", "failed", message=str(e)[:80])
         logger.error("Reporter agent failed: %s", e)
-        return FinalReport(contract_name=filename, processed_normally=False)
+        return FinalReport(contract_name=filename, processed_normally=False, error_message=str(e))

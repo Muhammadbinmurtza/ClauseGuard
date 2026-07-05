@@ -1,3 +1,7 @@
 clauseguard
 .env
 hahah.md
+node_modules/
+.next/
+*.pyc
+__pycache__/
